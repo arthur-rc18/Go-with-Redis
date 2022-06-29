@@ -10,21 +10,21 @@ import (
 )
 
 var blockMock = Blocks{
-	ID:       "C3:0",
-	Name:     "Block test",
+	ID:       "C1:0",
+	Name:     "Test Block",
 	ParentID: "0",
 	Centroid: *geojson.NewPointGeometry([]float64{-12.50830530855398 - 52.64695717817407}),
 }
 
 func mockBlock() {
-	db := database.ConnectWithDB()
-	db.Set(database.CTX, blockMock.ID, blockMock, 0)
+	db := database.DatabaseConnection()
+	db.Set(database.Context, blockMock.ID, blockMock, 0)
 }
 
 func UnmockBlock() {
 
-	db := database.ConnectWithDB()
-	db.FlushAll(database.CTX)
+	db := database.DatabaseConnection()
+	db.FlushAll(database.Context)
 }
 
 func TestGetAllBlocks(t *testing.T) {
@@ -47,7 +47,7 @@ func TestGetBlockByID(t *testing.T) {
 		assert.Equal(t, blockMock, got)
 	})
 
-	t.Run("Test getting inexistent block", func(t *testing.T) {
+	t.Run("Test getting a block not presented in the database", func(t *testing.T) {
 		got, _ := GetBlockByID("C3")
 		assert.Equal(t, Blocks{}, got)
 
@@ -56,7 +56,7 @@ func TestGetBlockByID(t *testing.T) {
 
 func TestCreateBlock(t *testing.T) {
 	t.Parallel()
-	t.Run("insert existent key", func(t *testing.T) {
+	t.Run("inserting existent key", func(t *testing.T) {
 		mockBlock()
 		defer UnmockBlock()
 
@@ -64,7 +64,7 @@ func TestCreateBlock(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("insert new block", func(t *testing.T) {
+	t.Run("inserting a new block", func(t *testing.T) {
 		UnmockBlock()
 		err := CreateBlock(blockMock)
 		if err != nil {
@@ -79,7 +79,7 @@ func TestUpdateBlock(t *testing.T) {
 
 	updatedBlock := blockMock
 	t.Parallel()
-	t.Run("valid update block", func(t *testing.T) {
+	t.Run("validating update block", func(t *testing.T) {
 		mockBlock()
 		defer UnmockBlock()
 		err := UpdateBlockByID("C3", updatedBlock)
@@ -90,7 +90,7 @@ func TestUpdateBlock(t *testing.T) {
 		assert.Equal(t, gotBlock, updatedBlock)
 	})
 
-	t.Run("Invalid block", func(t *testing.T) {
+	t.Run("Invalid block test", func(t *testing.T) {
 		UnmockBlock()
 		err := UpdateBlockByID("C3", updatedBlock)
 		assert.Error(t, err)

@@ -2,8 +2,6 @@ package models
 
 import (
 	"reflect"
-
-	"github.com/arthur-rc18/Go-Redis/utils"
 )
 
 type Tree struct {
@@ -15,21 +13,23 @@ func GetTreeID(id string) Tree {
 
 	var tree Tree
 	var blockId string
+
 	var keysChildren []string
+
 	if id == "0" {
-		keysChildren = utils.GetKeys("*:" + id)
+		keysChildren = KeysRedis("*:" + id)
 		tree.Block = Blocks{}
 	} else {
 		tree.Block, _ = GetBlockByID(id)
 		if reflect.DeepEqual(tree.Block, Blocks{}) {
 			return Tree{}
 		}
-		blockId = utils.GetIndividualBlockId(tree.Block.ID)
-		keysChildren = utils.GetKeys("*:" + blockId)
+		blockId = GetBlockId(tree.Block.ID)
+		keysChildren = KeysRedis("*:" + blockId)
 	}
 
 	for _, keyChild := range keysChildren {
-		tree.Children = append(tree.Children, GetTreeID(utils.GetIndividualBlockId(keyChild)))
+		tree.Children = append(tree.Children, GetTreeID(GetBlockId(keyChild)))
 	}
 	return tree
 

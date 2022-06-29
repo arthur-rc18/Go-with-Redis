@@ -6,20 +6,14 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"strings"
 
 	"github.com/arthur-rc18/Go-Redis/database"
-	"github.com/arthur-rc18/Go-Redis/utils"
 
 	geojson "github.com/paulmach/go.geojson"
 )
 
 const defaultPattern string = "*:*"
-
-var (
-	ErrBlockAlreadyExists = errors.New("this key already exists on database")
-	ErrInvalidParentId    = errors.New("invalid parent id or parent doesn't exists")
-	ErrBlockNotExists     = errors.New("key not exists on database")
-)
 
 type Blocks struct {
 	ID       string           `json:"id,omitempty" `
@@ -29,11 +23,29 @@ type Blocks struct {
 	Value    float64          `json:"value,omitempty" `
 }
 
+func KeysRedis(pattern string) []string {
+	db := database.DatabaseConnection()
+	result, err := db.Keys(database.Context, pattern).Result()
+	if err != nil {
+		return nil
+	}
+	return result
+}
+
+func GetBlockId(compositeKey string) string {
+	return strings.Split(compositeKey, ":")[0]
+}
+
+func UpdatedBlockId(key, parentKey string) string {
+	blockKey := GetBlockId(key)
+	return blockKey + ":" + parentKey
+}
+
 func (b Blocks) MarshalBinary() ([]byte, error) {
 	return json.Marshal(b)
 }
 
-func (b Blocks) UnmarshalBinary(data []byte) error {
+func (b *Blocks) UnmarshalBinary(data []byte) error {
 	return json.Unmarshal(data, &b)
 }
 
@@ -44,7 +56,7 @@ func GetBlocksData() ([]Blocks, error) {
 
 	blocksList := []Blocks{}
 
-	keys, err := redisClient.Keys(database.CTX, "*").Result()
+	keys, err := redisClient.Keys(database.Context, "*").Result()
 	if err != nil {
 		log.Println(err)
 		return []Blocks{}, err
@@ -53,7 +65,7 @@ func GetBlocksData() ([]Blocks, error) {
 	var block Blocks
 	for _, result := range keys {
 
-		value, err := redisClient.Get(database.CTX, result).Result()
+		value, err := redisClient.Get(database.Context, result).Result()
 		if err != nil {
 			log.Println(err.Error())
 			return blocksList, err
@@ -71,47 +83,54 @@ func GetBlocksData() ([]Blocks, error) {
 
 func GetBlockByID(key string) (Blocks, error) {
 
-	db := database.ConnectWithDB()
+	db := database.DatabaseConnection()
 
-	blockKey := utils.GetKeys(key + ":*")
+	blockKey := KeysRedis(key + ":*")
 	if len(blockKey) != 1 {
-		return Blocks{}, nil
+		return Blocks{}, NonExistantBlock
 	}
-	result, err := db.Get(database.CTX, blockKey[0]).Result()
+	result, err := db.Get(database.Context, blockKey[0]).Result()
 	if err != nil {
 		return Blocks{}, err
 	}
+
 	var block Blocks
+
 	if err := block.UnmarshalBinary([]byte(result)); err != nil {
 		fmt.Println(err.Error(), err)
 		return Blocks{}, err
 	}
+	fmt.Println(block)
 	return block, nil
 
 }
 
 func DeleteBlockByID(key string) error {
 
-	db := database.ConnectWithDB()
-	checkBlockKey := utils.GetKeys(key + ":*")
+	db := database.DatabaseConnection()
+	checkBlockKey := KeysRedis(key + ":*")
 	if len(checkBlockKey) != 1 {
-		return ErrBlockNotExists
+		return NonExistantBlock
 	}
 	blockKey := checkBlockKey[0]
-	childrenKeys := utils.GetKeys("*:" + utils.GetIndividualBlockId(blockKey))
+	childrenKeys := KeysRedis("*:" + GetBlockId(blockKey))
 	if len(childrenKeys) == 0 {
-		err := db.Del(database.CTX, blockKey).Err()
+		err := db.Del(database.Context, blockKey).Err()
 		return err
 	}
 
-	childrenBlocks, err := getChildren(childrenKeys)
+	childrenBlocks, err := children(childrenKeys)
 	if err != nil {
 		return err
 	}
 
-	block, _ := GetBlockByID(utils.GetIndividualBlockId(blockKey))
+	block, err := GetBlockByID(GetBlockId(blockKey))
+	if err != nil {
+		log.Println(err.Error())
+		return err
+	}
 	for _, childBlock := range childrenBlocks {
-		childBlock.ID = utils.UpdatedBlockId(childBlock.ID, block.ParentID)
+		childBlock.ID = UpdatedBlockId(childBlock.ID, block.ParentID)
 		childBlock.ParentID = block.ParentID
 		err := CreateBlock(childBlock)
 		if err != nil {
@@ -119,23 +138,23 @@ func DeleteBlockByID(key string) error {
 		}
 	}
 	keysToDelete := append(childrenKeys, block.ID)
-	err = db.Del(database.CTX, keysToDelete...).Err()
+	err = db.Del(database.Context, keysToDelete...).Err()
 
 	return err
 
 }
 
 func CreateBlock(block Blocks) error {
-	if existentKeys := utils.GetKeys(block.ID); len(existentKeys) != 0 {
-		return ErrBlockAlreadyExists
+	if existentKeys := KeysRedis(block.ID); len(existentKeys) != 0 {
+		return ErrBlockExisted
 	}
 	return setBlock(block)
 }
 
 func UpdateBlockByID(key string, block Blocks) error {
 
-	if checkBlockKey := utils.GetKeys(key + ":*"); len(checkBlockKey) != 1 {
-		return ErrBlockNotExists
+	if existentKeys := KeysRedis(key + ":*"); len(existentKeys) != 1 {
+		return NonExistantBlock
 	}
 	return setBlock(block)
 
@@ -145,21 +164,21 @@ func setBlock(block Blocks) error {
 	if block.ParentID != "0" {
 		parentBlock, _ := GetBlockByID(block.ParentID)
 		if reflect.DeepEqual(parentBlock, Blocks{}) {
-			return ErrInvalidParentId
+			return InvalidParent
 		}
 	}
 
-	db := database.ConnectWithDB()
-	err := db.Set(database.CTX, block.ID, block, 0).Err()
+	db := database.DatabaseConnection()
+	err := db.Set(database.Context, block.ID, block, 0).Err()
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func getChildren(childrenKeys []string) ([]Blocks, error) {
-	db := database.ConnectWithDB()
-	result, err := db.MGet(database.CTX, childrenKeys...).Result()
+func children(childrenKeys []string) ([]Blocks, error) {
+	db := database.DatabaseConnection()
+	result, err := db.MGet(database.Context, childrenKeys...).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -175,3 +194,9 @@ func getChildren(childrenKeys []string) ([]Blocks, error) {
 	}
 	return childrenBlocks, nil
 }
+
+var (
+	ErrBlockExisted  = errors.New("already existed key")
+	InvalidParent    = errors.New("error with parent id")
+	NonExistantBlock = errors.New("nonExistant key on database")
+)

@@ -14,15 +14,15 @@ var (
 		ID:       "C0:0",
 		Name:     "Cliente A",
 		ParentID: "0",
-		Centroid: *geojson.NewPointGeometry([]float64{-48.289546966552734, -18.931050694554795}),
-		Value:    10000,
+		Centroid: *geojson.NewPointGeometry([]float64{-14.745636148936388, -63.8203580290067}),
+		Value:    25000,
 	}
 	f1 = Blocks{
 		ID:       "F1:C0",
 		Name:     "FAZENDA 1",
 		ParentID: "C0",
-		Centroid: *geojson.NewPointGeometry([]float64{-52.9046630859375, -18.132801356084773}),
-		Value:    1000,
+		Centroid: *geojson.NewPointGeometry([]float64{-7.946470513501444, -74.68622424624228}),
+		Value:    2000,
 	}
 )
 
@@ -38,10 +38,10 @@ var treeMock = Tree{
 
 func MockTree(t *testing.T) {
 	UnmockTree(t)
-	db := database.ConnectWithDB()
+	db := database.DatabaseConnection()
 	blocks := []Blocks{c0, f1}
 	for _, block := range blocks {
-		err := db.Set(database.CTX, block.ID, block, 0).Err()
+		err := db.Set(database.Context, block.ID, block, 0).Err()
 		if err != nil {
 			t.Error(err)
 			return
@@ -50,15 +50,15 @@ func MockTree(t *testing.T) {
 }
 
 func UnmockTree(t *testing.T) {
-	db := database.ConnectWithDB()
-	err := db.FlushAll(database.CTX).Err()
+	db := database.DatabaseConnection()
+	err := db.FlushAll(database.Context).Err()
 	if err != nil {
 		t.Error(err)
 	}
 }
 
 func TestGetTreeById(t *testing.T) {
-	t.Run("mocked tree", func(t *testing.T) {
+	t.Run("mocking tree test", func(t *testing.T) {
 		MockTree(t)
 		defer UnmockTree(t)
 
@@ -66,7 +66,7 @@ func TestGetTreeById(t *testing.T) {
 
 		assert.Equal(t, treeMock, got)
 	})
-	t.Run("nonexistent tree", func(t *testing.T) {
+	t.Run("key not presented in database test", func(t *testing.T) {
 		got := GetTreeID("C0")
 		assert.Equal(t, Tree{}, got)
 		assert.NotEqual(t, treeMock, got)
