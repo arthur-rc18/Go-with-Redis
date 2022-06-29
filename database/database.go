@@ -7,13 +7,7 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-var (
-	db *redis.Client
-
-	once sync.Once
-)
-
-var CTX = context.Background()
+var Context = context.Background()
 
 func ConnectRedis() *redis.Client {
 
@@ -25,11 +19,17 @@ func ConnectRedis() *redis.Client {
 
 }
 
-func ConnectWithDB() *redis.Client {
+func DatabaseConnection() *redis.Client {
 	if db == nil {
-		once.Do(func() {
+		snc.Do(func() {
 			db = ConnectRedis()
 		})
 	}
 	return db
 }
+
+var (
+	db *redis.Client
+
+	snc sync.Once
+)
