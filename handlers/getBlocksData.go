@@ -4,7 +4,6 @@ import (
 	"log"
 	"net/http"
 	"reflect"
-	"strings"
 
 	"github.com/arthur-rc18/Go-Redis/models"
 	"github.com/gin-gonic/gin"
@@ -56,21 +55,19 @@ func GetTreeID(ctx *gin.Context) {
 
 func DeleteBlockByID(ctx *gin.Context) {
 
-	id := ctx.Param("id")
-
-	err := models.DeleteBlockByID(id)
-
-	if err != nil {
-		if strings.Contains(err.Error(), "Non existant ID") {
-			ctx.AbortWithStatus(http.StatusNotFound)
-		} else {
-			ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		}
-	} else {
-		ctx.JSON(http.StatusOK, gin.H{
-			"block": "deleted with success",
-		})
+	idToDelete := ctx.Param("id")
+	err := models.DeleteBlockByID(idToDelete)
+	if err == models.NonExistantBlock {
+		ctx.JSON(http.StatusNotFound, nil)
+		return
+	} else if err == models.InvalidParent {
+		ctx.JSON(http.StatusBadRequest, err)
+		return
+	} else if err != nil {
+		ctx.JSON(http.StatusInternalServerError, nil)
+		return
 	}
+	ctx.JSON(http.StatusOK, nil)
 
 }
 
@@ -86,15 +83,13 @@ func UpdateBlockByID(ctx *gin.Context) {
 	}
 
 	err = models.UpdateBlockByID(id, newBlock)
-	if err == models.ErrBlockNotExists {
+	if err == models.NonExistantBlock {
 		ctx.JSON(http.StatusNotFound, gin.H{
-			"data":  newBlock,
 			"error": err.Error(),
 		})
 		return
-	} else if err == models.ErrInvalidParentId {
+	} else if err == models.InvalidParent {
 		ctx.JSON(http.StatusBadRequest, gin.H{
-			"data":  newBlock,
 			"error": err.Error(),
 		})
 		return
@@ -116,7 +111,7 @@ func CreateBlock(ctx *gin.Context) {
 	}
 
 	err = models.CreateBlock(block)
-	if err == models.ErrBlockAlreadyExists || err == models.ErrInvalidParentId {
+	if err == models.ErrBlockExisted || err == models.InvalidParent {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"data":  block,
 			"error": err.Error(),
