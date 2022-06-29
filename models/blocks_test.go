@@ -102,6 +102,7 @@ func TestDeleteBlock(t *testing.T) {
 	t.Run("existent block", func(t *testing.T) {
 		mockBlock()
 		defer UnmockBlock()
+
 		err := DeleteBlockByID("C3")
 		if err != nil {
 			t.Error(err)
